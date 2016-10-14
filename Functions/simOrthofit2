@@ -35,7 +35,7 @@ simOrthofit2<-function(rho,p,n, ridge=1, nsim,  phi=1, nonzeros=3,coef=c(.5,.75,
   ans$modRaw <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
   colnames(ans$modRaw) <- c("mod.size","correct")
   ans$modDecoSSA<- data.frame(matrix(NA, nrow = nsim, ncol = 2))
-  colnames(ans$modDecoSSA) <- c("mod.size","correct")
+  colnames(ans$modDecoSSA) <-  c("mod.size","correct")
   ans$modRawSSA <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
   colnames(ans$modRawSSA) <- c("mod.size","correct")
   ans$modms <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
