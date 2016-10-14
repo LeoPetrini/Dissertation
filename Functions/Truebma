@@ -17,5 +17,5 @@ truebma<-function(p=p,pm,rot){
   margpp=1-margpp #P(gamma=1|y)
   beta=solve(t(rot))%*%as.matrix(pm$bma[,2]) #beta
   bma=as.data.frame(cbind(margpp,beta)) ; colnames(bma) <- c("margpp", "beta")
-  return(bma)
+  return(bma) 
 }
