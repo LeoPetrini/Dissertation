@@ -1,0 +1,182 @@
+simOrthofit2<-function(rho,p,n, ridge=1, nsim,  phi=1, nonzeros=3,coef=c(.5,.75,1),priorCoef=zellnerprior(tau=n),priorDelta=modelbinomprior(p=1/p),priorVar=igprior(0.01,0.01)){
+  require(nsprcomp)
+  require(mvtnorm)
+  require(spca)
+  require(tcltk)
+  require(mombf)
+  require(Metrics)
+  require(stringi)
+  source("fixed_u_bms.R")
+  p2=p-2
+  p1=p-1
+  pb <- txtProgressBar(min = 0, max = nsim, style = 3)
+  ans <- list(NULL)
+  ans$SPt <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$LSt <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$SPtpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$LStpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$modSP <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modSP) <- c("mod.size","correct")
+  ans$modLS <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modLS) <- c("mod.size","correct")
+  ans$modSP <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  ans$decot <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$decotpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$decoSSAt <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$decoSSAtpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$Rawtpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$Rawt <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$RawSSAtpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$RawSSAt <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$mstpp <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$mst <- data.frame(matrix(NA, nrow = p, ncol = nsim))
+  ans$modDeco<- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modDeco) <- c("mod.size","correct")
+  ans$modRaw <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modRaw) <- c("mod.size","correct")
+  ans$modDecoSSA<- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modDecoSSA) <- c("mod.size","correct")
+  ans$modRawSSA <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modRawSSA) <- c("mod.size","correct")
+  ans$modms <- data.frame(matrix(NA, nrow = nsim, ncol = 2))
+  colnames(ans$modms) <- c("mod.size","correct")
+  nonzeros=p-nonzeros
+  th<-c(rep(0,nonzeros),coef)
+  TH=do.call("cbind", replicate(2, th, simplify = FALSE))
+  wrap.mse <- function(i, x_hat, x) {
+    mse(x_hat[i, ], x[i, ])
+  }
+  for (t in 1:nsim) {
+    Sys.sleep(0.1); setTxtProgressBar(pb, t)
+    R<-diag(p)
+    R[upper.tri(R)]<-R[lower.tri(R)]<-rho
+    x<-scale(rmvnorm(n,mean = rep(0, nrow(R)), sigma = R),center=T,scale=T)
+    th<-th
+    y<-x%*% matrix(th,ncol=1)+rnorm(n,sd=sqrt(phi)) 
+    #DECO
+    if(p<n){ svd1 <- svd(x); u <- svd1$u; v <- svd1$v; d <- diag(svd1$d)
+    tx=sqrt(p)*t(v)
+    ty=sqrt(p)*solve(d)%*%t(u)%*%y 
+    deco<-postModeOrtho(y=ty,x=tx,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+    ans$modDeco[t,1]=length(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))) 
+    v1=length(which(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))==p2))
+    v2=length(which(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))==p1))
+    v3=length(which(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))==p))
+    ans$modDeco[t,2]=sum(v1,v2,v3)
+    
+    decoSSA<-postModeOrtho2(y=ty,x=tx,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+    ans$modDecoSSA[t,1]=length(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))) 
+    v1SSA=length(which(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))==p2))
+    v2SSA=length(which(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))==p1))
+    v3SSA=length(which(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))==p))
+    ans$modDecoSSA[t,2]=sum(v1SSA,v2SSA,v3SSA)
+    
+    
+    } else{
+      G=x%*%t(x)/p+ridge*diag(n)
+      S=svd(G) ; uu<-S$u ; dd=S$d  ; vv<-S$v
+      d1<-diag(1/sqrt(dd)) 
+      tx=uu%*%d1%*%t(uu)%*%x
+      ty=uu%*%d1%*%t(uu)%*%y
+      
+      deco<-postModeOrtho(y=ty,x=tx,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+      ans$modDeco[t,1]=length(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))) 
+      v1=length(which(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))==p2))
+      v2=length(which(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))==p1))
+      v3=length(which(as.numeric(unlist(stri_split(deco$models$modelid[1],fixed=',')))==p))
+      ans$modDeco[t,2]=sum(v1,v2,v3) 
+      
+      decoSSA<-postModeOrtho2(y=ty,x=tx,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+      ans$modDecoSSA[t,1]=length(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))) 
+      v1SSA=length(which(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))==p2))
+      v2SSA=length(which(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))==p1))
+      v3SSA=length(which(as.numeric(unlist(stri_split(decoSSA$models$modelid[1],fixed=',')))==p))
+      ans$modDecoSSA[t,2]=sum(v1SSA,v2SSA,v3SSA) 
+    }
+    SPCA
+    e2<-nsprcomp(x, k = 2, scale. = TRUE,ncomp=min(p,n))
+    x2<-x%*%e2$rotation
+    bbe1 <- spcabe(t(x)%*%x, nd = min(p,n), thresh = 0.35, unc = F)
+    x3<-x%*%bbe1$loadings
+    
+    SP<-postModeOrtho2(y=y,x=x2,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+    er=list() 
+    f=(as.numeric(unlist(stri_split((SP$models[which.max(SP$models$pp),][1,1]),fixed=','))))
+    for(i in 1:length(f)){
+      er[i]=list(which(e2$rotation[,f[i]]!=0))}
+    ner <- max(sapply(er, length))
+    ll <- lapply(er, function(X) {
+     # c(as.character(X), rep("", times = ner - length(X)))
+    })
+    out <- do.call(cbind, ll) 
+    out=as.data.frame(out)
+    ans$modSP[t,1]=sum((unique(unlist(out))) != "") 
+    cc1=length(which(as.numeric(as.character(unique(unlist(out))))==p)) #right ones
+    cc2=length(which(as.numeric(as.character(unique(unlist(out))))==p1))
+    cc3=length(which(as.numeric(as.character(unique(unlist(out))))==p2))
+    ans$modSP[t,2]=sum(cc1,cc2,cc3)
+    
+    LS<-postModeOrtho2(y=y,x=x3,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+    er2=list() 
+    f2=(as.numeric(unlist(stri_split((LS$models[which.max(LS$models$pp),][1,1]),fixed=','))))
+    for(i in 1:length(f2)){
+    er2[i]=list(which(bbe1$loadings[,f2[i]]!=0))}
+    ner2 <- max(sapply(er2, length))
+    ll2 <- lapply(er2, function(X) {
+    c(as.character(X), rep("", times = ner2 - length(X)))
+    })
+     out2 <- do.call(cbind, ll2) 
+    out2=as.data.frame(out2)
+    ans$modLS[t,1]=sum((unique(unlist(out2))) != "") 
+    c1=length(which(as.numeric(as.character(unique(unlist(out2))))==p)) #right ones
+    c2=length(which(as.numeric(as.character(unique(unlist(out2))))==p1))
+    c3=length(which(as.numeric(as.character(unique(unlist(out2))))==p2))
+    ans$modLS[t,2]=sum(c1,c2,c3)
+    
+    XX<-postModeOrtho(y=y,x=x,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+    ans$modRaw[t,1]=length(as.numeric(unlist(stri_split(XX$models$modelid[1],fixed=',')))) 
+    vv1=length(which(as.numeric(unlist(stri_split(XX$models$modelid[1],fixed=',')))==p2))
+    vv2=length(which(as.numeric(unlist(stri_split(XX$models$modelid[1],fixed=',')))==p1))
+    vv3=length(which(as.numeric(unlist(stri_split(XX$models$modelid[1],fixed=',')))==p))
+    ans$modRaw[t,2]=sum(vv1,vv2,vv3)
+    
+    XXSSA<-postModeOrtho2(y=y,x=x,priorCoef=priorCoef,priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
+    ans$modRawSSA[t,1]=length(as.numeric(unlist(stri_split(XXSSA$models$modelid[1],fixed=',')))) 
+    vv1SSA=length(which(as.numeric(unlist(stri_split(XXSSA$models$modelid[1],fixed=',')))==p2))
+    vv2SSA=length(which(as.numeric(unlist(stri_split(XXSSA$models$modelid[1],fixed=',')))==p1))
+    vv3SSA=length(which(as.numeric(unlist(stri_split(XXSSA$models$modelid[1],fixed=',')))==p))
+    ans$modRawSSA[t,2]=sum(vv1SSA,vv2SSA,vv3SSA)
+    
+    mcmc<-modelSelection(y=y, x=x, enumerate=F,niter=10^2,center=F, scale=F,priorCoef=priorCoef, priorDelta=priorDelta, priorVar=priorVar)
+    ans$modms[t,1]=length(which(mcmc$coef!=0))
+    vvv1=length(which(which(mcmc$coef!=0)==p1))
+    vvv2=length(which(which(mcmc$coef!=0)==p2))
+    vvv3=length(which(which(mcmc$coef!=0)==p))
+    
+    ans$modms[t,2]=sum(vvv1,vvv2,vvv3)
+    ans$mstpp[t] <-  data.frame(mcmc$margpp)
+    ans$mst[t] <-  data.frame(mcmc$coef)
+    ans$decot[t] <- data.frame(deco$bma[,2])
+    ans$decotpp[t] <-  data.frame(deco$bma[,1])
+    ans$Rawtpp[t] <-  data.frame(XX$bma[,1])
+    ans$Rawt[t] <-  data.frame(XX$bma[,2])
+    ans$decoSSAt[t] <- data.frame(decoSSA$bma[,2])
+    ans$decoSSAtpp[t] <-  data.frame(decoSSA$bma[,1])
+    ans$RawSSAtpp[t] <-  data.frame(XXSSA$bma[,1])
+    ans$RawSSAt[t] <-  data.frame(XXSSA$bma[,2])
+    # ans$SPt[t] <- data.frame(truebma(p=p,pm=SP,rot=e2$rotation)[,2])
+    #ans$LSt[t] <- data.frame(truebma(p=p,pm=LS,rot=bbe1$loadings)[,2])
+    #ans$SPtpp[t] <- data.frame(truebma(p=p,pm=SP,rot=e2$rotation)[,1])
+    #ans$LStpp[t] <- data.frame(truebma(p=p,pm=LS,rot=bbe1$loadings)[,1])
+    
+     }
+  ans$RawMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$Rawt, x = TH) ; ans$RawMSE=as.data.frame(as.numeric(ans$RawMSE))
+  ans$decoMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$decot, x = TH) ; ans$decoMSE=as.data.frame(as.numeric(ans$decoMSE))
+  ans$RawSSAMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$RawSSAt, x = TH) ; ans$RawSSAMSE=as.data.frame(as.numeric(ans$RawSSAMSE))
+  ans$decoSSAMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$decoSSAt, x = TH) ; ans$decoSSAMSE=as.data.frame(as.numeric(ans$decoSSAMSE))
+  ans$msMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$mst, x = TH); ans$msMSE=as.data.frame(as.numeric(ans$msMSE))
+  ans$SPMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$SPt, x = TH); ans$SPMSE=as.data.frame(as.numeric(ans$SPMSE))
+  ans$LSMSE=lapply(seq_len(nrow(TH)), wrap.mse, x_hat = ans$LSt, x = TH) ; ans$LSMSE=as.data.frame(as.numeric(ans$LSMSE))
+  
+  return(ans)
+}
