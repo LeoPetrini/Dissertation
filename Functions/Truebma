@@ -1,0 +1,21 @@
+######################################
+#Marginal pp for Beta from Beta_tilde#
+######################################
+
+truebma<-function(p=p,pm,rot){
+  require(mombf)
+  phi=pm$phi #phi and phi_pp
+  margpp <- double(p) #initialize vector of margpp
+  pm$bma[,1] #p(gammatilde=1|y)
+  for (i in 1:p) {
+    df=as.data.frame(which(rot[i,]!=0,arr.ind = F))
+    df[,1]
+    tilde=prod(1-pm$bma[c(df[,1]),1])
+    tr<-tilde* phi[,2]
+    margpp[i] <- int.simpson2(phi[,1],  tr, equi=FALSE, method="CSR")
+  }
+  margpp=1-margpp #P(gamma=1|y)
+  beta=solve(t(rot))%*%as.matrix(pm$bma[,2]) #beta
+  bma=as.data.frame(cbind(margpp,beta)) ; colnames(bma) <- c("margpp", "beta")
+  return(bma)
+}
